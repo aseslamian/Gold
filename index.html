@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Brain Region Interaction Network</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: Georgia, serif;
+    padding: 2rem;
+  }
+  h1 {
+    color: #e8dcc8;
+    font-size: 1.2rem;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  p.sub {
+    color: #6b7fa3;
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-align: center;
+    margin-top: 0.3rem;
+    margin-bottom: 1.2rem;
+  }
+  svg { overflow: visible; }
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.2rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #6b7fa3;
+    font-size: 0.72rem;
+  }
+  .hint {
+    color: #3a4a63;
+    font-size: 0.72rem;
+    font-style: italic;
+  }
+  .tooltip {
+    position: fixed;
+    background: #0a0e1aee;
+    border: 1px solid #4a6fa5;
+    color: #e8dcc8;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>Brain Region Interaction Network</h1>
+<p class="sub">Friedman H-statistic · Pairwise Feature Interactions</p>
+
+<svg id="graph" width="660" height="440"></svg>
+
+<div class="legend">
+  <div class="legend-item">
+    <svg width="50" height="7"><line x1="0" y1="3.5" x2="50" y2="3.5" stroke="rgb(90,105,175)" stroke-width="3"/></svg>
+    H ≈ 0.52
+  </div>
+  <div class="legend-item">
+    <svg width="50" height="9"><line x1="0" y1="4.5" x2="50" y2="4.5" stroke="rgb(145,90,150)" stroke-width="5"/></svg>
+    H ≈ 0.64
+  </div>
+  <div class="legend-item">
+    <svg width="50" height="11"><line x1="0" y1="5.5" x2="50" y2="5.5" stroke="rgb(205,75,80)" stroke-width="7"/></svg>
+    H ≈ 0.76
+  </div>
+  <div class="legend-item">
+    <svg width="16" height="16"><circle cx="8" cy="8" r="7" fill="#0f2a55" stroke="#7eb8f7" stroke-width="2"/></svg>
+    Hub node
+  </div>
+  <span class="hint">Hover nodes or edges to explore</span>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const W = 660, H = 440;
+
+const interactions = [
+  { source: "LATERALORBITOFRONTAL", target: "LINGUAL", h: 0.757 },
+  { source: "LINGUAL", target: "FUSIFORM", h: 0.732 },
+  { source: "LINGUAL", target: "PARACENTRAL", h: 0.691 },
+  { source: "LINGUAL", target: "ROSTRALMIDDLEFRONTAL", h: 0.652 },
+  { source: "LINGUAL", target: "CAUDALMIDDLEFRONTAL", h: 0.613 },
+  { source: "PARACENTRAL", target: "CAUDALMIDDLEFRONTAL", h: 0.528 },
+  { source: "ROSTRALMIDDLEFRONTAL", target: "FUSIFORM", h: 0.527 },
+  { source: "PARACENTRAL", target: "ROSTRALMIDDLEFRONTAL", h: 0.527 },
+  { source: "LATERALORBITOFRONTAL", target: "ROSTRALMIDDLEFRONTAL", h: 0.526 },
+  { source: "PARACENTRAL", target: "FUSIFORM", h: 0.522 },
+];
+
+const nodeLabels = {
+  LINGUAL: ["Lingual", "Gyrus"],
+  FUSIFORM: ["Fusiform"],
+  PARACENTRAL: ["Paracentral"],
+  ROSTRALMIDDLEFRONTAL: ["Rostral Mid", "Frontal"],
+  LATERALORBITOFRONTAL: ["Lateral", "OFC"],
+  CAUDALMIDDLEFRONTAL: ["Caudal Mid", "Frontal"],
+};
+
+const nodePositions = {
+  LINGUAL:               { x: 0.50, y: 0.50 },
+  LATERALORBITOFRONTAL:  { x: 0.15, y: 0.25 },
+  FUSIFORM:              { x: 0.82, y: 0.68 },
+  PARACENTRAL:           { x: 0.78, y: 0.22 },
+  ROSTRALMIDDLEFRONTAL:  { x: 0.55, y: 0.10 },
+  CAUDALMIDDLEFRONTAL:   { x: 0.18, y: 0.72 },
+};
+
+function hToColor(h) {
+  const t = (h - 0.5) / 0.3;
+  const r = Math.round(55  + t * 180);
+  const g = Math.round(120 - t * 60);
+  const b = Math.round(200 - t * 150);
+  return `rgb(${r},${g},${b})`;
+}
+
+function svgEl(tag, attrs) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// Compute degrees
+const nodeDegree = {};
+interactions.forEach(({ source, target, h }) => {
+  nodeDegree[source] = (nodeDegree[source] || 0) + h;
+  nodeDegree[target] = (nodeDegree[target] || 0) + h;
+});
+
+const nodes = Object.entries(nodePositions).map(([id, pos]) => ({
+  id, x: pos.x * W, y: pos.y * H,
+  degree: nodeDegree[id] || 0,
+  isHub: id === "LINGUAL",
+}));
+
+const maxDeg = Math.max(...nodes.map(n => n.degree));
+
+const edges = interactions.map(({ source, target, h }) => {
+  const s = nodes.find(n => n.id === source);
+  const t = nodes.find(n => n.id === target);
+  return { source, target, h, x1: s.x, y1: s.y, x2: t.x, y2: t.y };
+});
+
+const svg = document.getElementById("graph");
+
+// Defs
+const defs = svgEl("defs", {});
+const glow = svgEl("filter", { id: "glow" });
+const gb = svgEl("feGaussianBlur", { stdDeviation: "3", result: "blur" });
+const gm = svgEl("feMerge", {});
+gm.appendChild(svgEl("feMergeNode", { in: "blur" }));
+gm.appendChild(svgEl("feMergeNode", { in: "SourceGraphic" }));
+glow.appendChild(gb); glow.appendChild(gm);
+
+const hubglow = svgEl("filter", { id: "hubglow" });
+const hgb = svgEl("feGaussianBlur", { stdDeviation: "8", result: "blur" });
+const hgm = svgEl("feMerge", {});
+hgm.appendChild(svgEl("feMergeNode", { in: "blur" }));
+hgm.appendChild(svgEl("feMergeNode", { in: "SourceGraphic" }));
+hubglow.appendChild(hgb); hubglow.appendChild(hgm);
+defs.appendChild(glow); defs.appendChild(hubglow);
+svg.appendChild(defs);
+
+const tooltip = document.getElementById("tooltip");
+let hoveredNode = null;
+
+// Draw edges
+const edgeEls = edges.map((e, i) => {
+  const line = svgEl("line", {
+    x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2,
+    stroke: hToColor(e.h),
+    "stroke-width": e.h * 10,
+    "stroke-opacity": 0.65,
+    style: "cursor:pointer; transition: stroke-opacity 0.2s",
+  });
+  line.addEventListener("mouseenter", ev => {
+    tooltip.style.display = "block";
+    tooltip.textContent = `H = ${e.h.toFixed(3)}`;
+    if (!hoveredNode) updateOpacity(null, i);
+  });
+  line.addEventListener("mousemove", ev => {
+    tooltip.style.left = (ev.clientX + 12) + "px";
+    tooltip.style.top  = (ev.clientY - 28) + "px";
+  });
+  line.addEventListener("mouseleave", () => {
+    tooltip.style.display = "none";
+    updateOpacity(hoveredNode, null);
+  });
+  svg.appendChild(line);
+  return line;
+});
+
+// Draw nodes
+nodes.forEach(node => {
+  const r = 20 + (node.degree / maxDeg) * 20;
+
+  if (node.isHub) {
+    const ring = svgEl("circle", {
+      cx: node.x, cy: node.y, r: r + 14,
+      fill: "none", stroke: "#7eb8f7",
+      "stroke-width": 1.5, "stroke-dasharray": "4 3",
+      opacity: 0.5, filter: "url(#hubglow)",
+    });
+    svg.appendChild(ring);
+  }
+
+  const circle = svgEl("circle", {
+    cx: node.x, cy: node.y, r,
+    fill: node.isHub ? "#0f2a55" : "#111827",
+    stroke: node.isHub ? "#7eb8f7" : "#4a6fa5",
+    "stroke-width": node.isHub ? 2.5 : 1.5,
+    filter: node.isHub ? "url(#glow)" : "none",
+    style: "cursor:pointer; transition: opacity 0.2s",
+  });
+
+  const lines = nodeLabels[node.id];
+  const textEls = lines.map((line, li) => {
+    const t = svgEl("text", {
+      x: node.x,
+      y: node.y + (li - (lines.length - 1) / 2) * 13,
+      fill: node.isHub ? "#a8d4ff" : "#c8d8f0",
+      "font-size": node.isHub ? 11 : 10,
+      "font-weight": node.isHub ? "bold" : "normal",
+      "text-anchor": "middle",
+      "dominant-baseline": "middle",
+      style: "pointer-events:none; transition: opacity 0.2s",
+    });
+    t.textContent = line;
+    return t;
+  });
+
+  circle.addEventListener("mouseenter", () => {
+    hoveredNode = node.id;
+    updateOpacity(node.id, null);
+  });
+  circle.addEventListener("mouseleave", () => {
+    hoveredNode = null;
+    updateOpacity(null, null);
+  });
+
+  svg.appendChild(circle);
+  textEls.forEach(t => svg.appendChild(t));
+});
+
+function updateOpacity(activeNode, activeEdge) {
+  edgeEls.forEach((line, i) => {
+    const e = edges[i];
+    let opacity;
+    if (activeNode !== null) {
+      opacity = (e.source === activeNode || e.target === activeNode) ? 1 : 0.08;
+    } else if (activeEdge !== null) {
+      opacity = i === activeEdge ? 1 : 0.08;
+    } else {
+      opacity = 0.65;
+    }
+    line.setAttribute("stroke-opacity", opacity);
+  });
+
+  // Node opacity handled via CSS transitions would need refs — skip for simplicity
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Brain Region Causal Network (LiNGAM Bootstrap)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;700&display=swap');
+  :root {
+    --bg: #080c14;
+    --panel: #0d1320;
+    --border: #1e2d45;
+    --text: #c8d8f0;
+    --muted: #4a6080;
+    --accent: #4a9eff;
+    --hub: #ff6b6b;
+    --strong: #ff4444;
+    --mid: #aa66ff;
+    --weak: #4488ff;
+    --root: #ffd700;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .title-block h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #e8dcc8;
+    letter-spacing: 0.05em;
+  }
+  .title-block p {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .controls {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .ctrl-group label {
+    font-size: 0.58rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .ctrl-group .val { font-size: 0.75rem; color: var(--accent); }
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 120px; height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  input[type=search] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    width: 180px;
+    outline: none;
+  }
+  input[type=search]:focus { border-color: var(--accent); }
+  button.toggle {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  button.toggle.active {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    overflow: hidden;
+  }
+  #canvas-wrap {
+    position: relative;
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at center, rgba(20,40,80,0.15) 0%, transparent 70%),
+      var(--bg);
+  }
+  #graph { width: 100%; height: 100%; cursor: grab; }
+  #graph:active { cursor: grabbing; }
+  .sidebar {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .sidebar-section { margin-bottom: 18px; }
+  .sidebar-section h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 0.8rem;
+    color: #e8dcc8;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .pair-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 0.68rem;
+    border-bottom: 1px dotted var(--border);
+  }
+  .pair-name { color: var(--text); flex: 1; }
+  .pair-h { color: var(--accent); font-weight: 500; }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.7rem;
+    margin: 4px 0;
+  }
+  .legend-line { display: inline-block; }
+  #node-info { font-size: 0.7rem; }
+  #node-info .hint { color: var(--muted); font-style: italic; }
+  #node-info .meta {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    font-size: 0.65rem;
+  }
+  #node-info .conn-list .conn-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    font-size: 0.65rem;
+    border-bottom: 1px dotted var(--border);
+  }
+  #node-info .conn-row.in  { color: #aa88ff; }
+  #node-info .conn-row.out { color: #ff8866; }
+  text { user-select: none; pointer-events: none; }
+  text.node-label {
+    fill: white;
+    font-family: 'DM Mono', monospace;
+    font-weight: 500;
+  }
+  .stats-bar {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: 0.6rem; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .stats-bar b { color: var(--accent); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>BRAIN REGION CAUSAL NETWORK</h1>
+    <p>LiNGAM &middot; Bootstrap-Stabilized &middot; Directed Edges</p>
+  </div>
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>EDGE FREQUENCY <span class="val" id="thresh-val">0.70</span></label>
+      <input type="range" id="thresh" min="0" max="1" step="0.01" value="0.70"/>
+    </div>
+    <div class="ctrl-group">
+      <label>SEARCH REGION</label>
+      <input type="search" id="search" placeholder="e.g. hippocampus"/>
+    </div>
+    <div class="ctrl-group">
+      <label>LAYOUT</label>
+      <button class="toggle" id="layout-btn" title="Toggle force-directed vs hierarchical">Force</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="canvas-wrap">
+    <svg id="graph" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <!-- arrowhead markers, one per edge-strength color -->
+        <marker id="arrow-strong" viewBox="0 -5 10 10" refX="9" refY="0"
+                orient="auto" markerWidth="6" markerHeight="6">
+          <path d="M0,-4L8,0L0,4" fill="#ff4444"/>
+        </marker>
+        <marker id="arrow-mid" viewBox="0 -5 10 10" refX="9" refY="0"
+                orient="auto" markerWidth="6" markerHeight="6">
+          <path d="M0,-4L8,0L0,4" fill="#aa66ff"/>
+        </marker>
+        <marker id="arrow-weak" viewBox="0 -5 10 10" refX="9" refY="0"
+                orient="auto" markerWidth="5" markerHeight="5">
+          <path d="M0,-4L8,0L0,4" fill="#4488ff"/>
+        </marker>
+        <marker id="arrow-highlight" viewBox="0 -5 10 10" refX="9" refY="0"
+                orient="auto" markerWidth="7" markerHeight="7">
+          <path d="M0,-4L8,0L0,4" fill="#ffd700"/>
+        </marker>
+      </defs>
+      <g id="root-g"></g>
+    </svg>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <h3>Network Stats</h3>
+      <div class="stats-bar">
+        <span><b id="stat-nodes">0</b> nodes</span>
+        <span><b id="stat-edges">0</b> shown</span>
+        <span><b id="stat-total">0</b> total</span>
+      </div>
+      <div id="meta-block" class="meta" style="margin-top:8px"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Edge Strength (bootstrap freq.)</h3>
+      <div class="legend-row">
+        <svg class="legend-line" width="40" height="3"><line x1="0" y1="1.5" x2="40" y2="1.5" stroke="#ff4444" stroke-width="2.5"/></svg>
+        Stable (&ge;0.85)
+      </div>
+      <div class="legend-row">
+        <svg class="legend-line" width="40" height="3"><line x1="0" y1="1.5" x2="40" y2="1.5" stroke="#aa66ff" stroke-width="2"/></svg>
+        Moderate (0.70&ndash;0.85)
+      </div>
+      <div class="legend-row">
+        <svg class="legend-line" width="40" height="3"><line x1="0" y1="1.5" x2="40" y2="1.5" stroke="#4488ff" stroke-width="1.5"/></svg>
+        Weak (&lt;0.70)
+      </div>
+      <div class="legend-row" style="margin-top:8px">
+        <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#1a0f2e" stroke="#ff6b6b" stroke-width="2"/></svg>
+        Hub node (high degree)
+      </div>
+      <div class="legend-row">
+        <svg width="14" height="14"><circle cx="7" cy="7" r="6" fill="#1a0f2e" stroke="#ffd700" stroke-width="2"/></svg>
+        Causal root (no parents)
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Top Causal Edges</h3>
+      <div id="top-pairs"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Node Detail</h3>
+      <div id="node-info"><p class="hint">Click a node to see its parents and children.</p></div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Tips</h3>
+      <p class="hint" style="font-size:0.65rem; line-height:1.4">
+        &bull; Drag canvas to pan &middot; scroll to zoom<br>
+        &bull; Adjust threshold to filter edges<br>
+        &bull; Search highlights a region<br>
+        &bull; Click node for parents (purple) and children (orange)<br>
+        &bull; Toggle <i>Force</i>/<i>Hierarchical</i> for layout
+      </p>
+    </div>
+  </aside>
+</main>
+
+<script>
+// ==== Data injection ===========================================
+// The viewer can run in two modes:
+//   1. Dynamic: load causal_graph_data.json when served over HTTP.
+//   2. Standalone: use the embedded data below when opened directly.
+
+const EMBEDDED_GRAPH_DATA = {
+  "nodes": [
+    {"id": "CAUDALANTERIORCINGULATE_GVOL", "topo_rank": 1, "lingam_rank": 1, "braak_tier": 3},
+    {"id": "CAUDALMIDDLEFRONTAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "CAUDAL_ANTERIOR_CINGULATE_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "ENTORHINAL_GVOL", "topo_rank": 3, "lingam_rank": 3, "braak_tier": 1},
+    {"id": "ENTORHINAL_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 1},
+    {"id": "HIPPOCAMPUS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 1},
+    {"id": "INSULA_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "ISTHMUSCINGULATE_GVOL", "topo_rank": 6, "lingam_rank": 6, "braak_tier": 3},
+    {"id": "LATERALOCCIPITAL_GVOL", "topo_rank": 7, "lingam_rank": 7, "braak_tier": 6},
+    {"id": "LATERALORBITOFRONTAL_GVOL", "topo_rank": 8, "lingam_rank": 8, "braak_tier": 4},
+    {"id": "LATERAL_OCCIPITAL_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 6},
+    {"id": "MIDDLETEMPORAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 2},
+    {"id": "Mem_score", "topo_rank": -1, "lingam_rank": -1, "braak_tier": null},
+    {"id": "PARACENTRAL_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 5},
+    {"id": "PARAHIPPOCAMPAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 2},
+    {"id": "PARAHIPPOCAMPAL_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 2},
+    {"id": "PARSOPERCULARIS_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "PARSORBITALIS_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "PARS_OPERCULARIS_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "POSTERIORCINGULATE_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "POSTERIOR_CINGULATE_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "PRECENTRAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 5},
+    {"id": "PRECENTRAL_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 5},
+    {"id": "PRECUNEUS_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "PRECUNEUS_THICKNESS", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "ROSTRALMIDDLEFRONTAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "SUPERIORFRONTAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 4},
+    {"id": "SUPERIORTEMPORAL_GVOL", "topo_rank": -1, "lingam_rank": -1, "braak_tier": 3},
+    {"id": "uds3_ef", "topo_rank": -1, "lingam_rank": -1, "braak_tier": null}
+  ],
+  "edges": [
+    {"source": "Mem_score", "target": "uds3_ef", "freq": 1.0, "weight": 1.0},
+    {"source": "ENTORHINAL_GVOL", "target": "PARAHIPPOCAMPAL_THICKNESS", "freq": 0.98, "weight": 0.98},
+    {"source": "ROSTRALMIDDLEFRONTAL_GVOL", "target": "CAUDALMIDDLEFRONTAL_GVOL", "freq": 0.96, "weight": 0.96},
+    {"source": "ENTORHINAL_GVOL", "target": "ENTORHINAL_THICKNESS", "freq": 0.94, "weight": 0.94},
+    {"source": "PRECENTRAL_GVOL", "target": "PRECENTRAL_THICKNESS", "freq": 0.92, "weight": 0.92},
+    {"source": "ISTHMUSCINGULATE_GVOL", "target": "POSTERIORCINGULATE_GVOL", "freq": 0.9, "weight": 0.9},
+    {"source": "PARAHIPPOCAMPAL_GVOL", "target": "PARAHIPPOCAMPAL_THICKNESS", "freq": 0.9, "weight": 0.9},
+    {"source": "LATERALOCCIPITAL_GVOL", "target": "LATERAL_OCCIPITAL_THICKNESS", "freq": 0.88, "weight": 0.88},
+    {"source": "ISTHMUSCINGULATE_GVOL", "target": "PRECUNEUS_GVOL", "freq": 0.88, "weight": 0.88},
+    {"source": "CAUDALANTERIORCINGULATE_GVOL", "target": "CAUDAL_ANTERIOR_CINGULATE_THICKNESS", "freq": 0.86, "weight": 0.86},
+    {"source": "ENTORHINAL_THICKNESS", "target": "HIPPOCAMPUS", "freq": 0.86, "weight": 0.86},
+    {"source": "MIDDLETEMPORAL_GVOL", "target": "SUPERIORTEMPORAL_GVOL", "freq": 0.84, "weight": 0.84},
+    {"source": "LATERALORBITOFRONTAL_GVOL", "target": "PARSORBITALIS_GVOL", "freq": 0.84, "weight": 0.84},
+    {"source": "PRECENTRAL_GVOL", "target": "CAUDALMIDDLEFRONTAL_GVOL", "freq": 0.82, "weight": 0.82},
+    {"source": "PARSOPERCULARIS_GVOL", "target": "CAUDALMIDDLEFRONTAL_GVOL", "freq": 0.82, "weight": 0.82},
+    {"source": "PARAHIPPOCAMPAL_THICKNESS", "target": "HIPPOCAMPUS", "freq": 0.82, "weight": 0.82},
+    {"source": "SUPERIORFRONTAL_GVOL", "target": "INSULA_GVOL", "freq": 0.8, "weight": 0.8},
+    {"source": "PARSOPERCULARIS_GVOL", "target": "PARS_OPERCULARIS_THICKNESS", "freq": 0.8, "weight": 0.8},
+    {"source": "POSTERIOR_CINGULATE_THICKNESS", "target": "CAUDAL_ANTERIOR_CINGULATE_THICKNESS", "freq": 0.78, "weight": 0.78},
+    {"source": "PARACENTRAL_THICKNESS", "target": "PRECUNEUS_THICKNESS", "freq": 0.76, "weight": 0.76}
+  ],
+  "meta": {
+    "n_subjects_baseline": 2617,
+    "n_features": 60,
+    "n_bootstrap": 50,
+    "stable_threshold": 0.7,
+    "weight_threshold_pctile": 70,
+    "braak_concordance_rho": 0.109,
+    "braak_concordance_p": 0.418,
+    "asv_n_instances": null,
+    "asv_n_perm": null,
+    "asv_vs_shap_corr": null,
+    "note": "Edges are top 20 bootstrap-stable directed edges from DirectLiNGAM applied to baseline structural MRI. Braak concordance from prior baseline-only analysis."
+  }
+};
+
+let GRAPH_DATA = EMBEDDED_GRAPH_DATA;
+const DATA_PATH = "causal_graph_data.json";
+
+async function loadData() {
+  try {
+    const r = await fetch(DATA_PATH);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    GRAPH_DATA = await r.json();
+  } catch (e) {
+    console.warn("Could not load causal_graph_data.json; using embedded graph data.", e);
+  }
+  build();
+}
+
+// ==== Geometry / layout state ==================================
+const svg = document.getElementById("graph");
+const rootG = document.getElementById("root-g");
+let W = 1000, H = 700;
+
+function resize() {
+  const r = document.getElementById("canvas-wrap").getBoundingClientRect();
+  W = r.width; H = r.height;
+}
+window.addEventListener("resize", () => { resize(); if (GRAPH_DATA) tick(0); });
+
+let nodes = [];      // {id, x, y, vx, vy, deg, isRoot, isHub, braak}
+let edges = [];      // {source, target, freq, weight}
+let nodeIndex = {};  // id -> position in nodes
+
+let layoutMode = "force"; // "force" or "hier"
+
+function colorForFreq(f) {
+  if (f >= 0.85) return "#ff4444";
+  if (f >= 0.70) return "#aa66ff";
+  return "#4488ff";
+}
+function widthForFreq(f) {
+  if (f >= 0.85) return 2.5;
+  if (f >= 0.70) return 2.0;
+  return 1.2;
+}
+function markerForFreq(f) {
+  if (f >= 0.85) return "url(#arrow-strong)";
+  if (f >= 0.70) return "url(#arrow-mid)";
+  return "url(#arrow-weak)";
+}
+
+// ==== Build initial state ======================================
+function build() {
+  resize();
+  nodes = [];
+  nodeIndex = {};
+
+  // Compute weighted degree (in + out)
+  const deg = {};
+  GRAPH_DATA.edges.forEach(e => {
+    deg[e.source] = (deg[e.source] || 0) + e.freq;
+    deg[e.target] = (deg[e.target] || 0) + e.freq;
+  });
+  GRAPH_DATA.nodes.forEach(n => { if (!(n.id in deg)) deg[n.id] = 0; });
+
+  const maxDeg = Math.max(1e-9, ...Object.values(deg));
+  const inDeg = {};
+  GRAPH_DATA.edges.forEach(e => { inDeg[e.target] = (inDeg[e.target] || 0) + 1; });
+
+  // Initial positions: by topological rank in a circle
+  const N = GRAPH_DATA.nodes.length;
+  const sortedNodes = [...GRAPH_DATA.nodes].sort(
+    (a, b) => (a.topo_rank ?? 99) - (b.topo_rank ?? 99)
+  );
+  sortedNodes.forEach((n, i) => {
+    const ang = (i / N) * 2 * Math.PI - Math.PI / 2;
+    const r = Math.min(W, H) * 0.36;
+    nodes.push({
+      id: n.id,
+      x: W / 2 + r * Math.cos(ang),
+      y: H / 2 + r * Math.sin(ang),
+      vx: 0, vy: 0,
+      deg: deg[n.id] || 0,
+      braak: n.braak_tier,
+      lingam_rank: n.lingam_rank,
+      topo_rank: n.topo_rank,
+      isRoot: !inDeg[n.id],
+      isHub: (deg[n.id] || 0) > 0.6 * maxDeg,
+    });
+    nodeIndex[n.id] = nodes.length - 1;
+  });
+
+  edges = GRAPH_DATA.edges.slice();
+
+  populateMeta();
+  populateTopPairs();
+  draw();
+  startSimulation();
+}
+
+function populateMeta() {
+  const m = GRAPH_DATA.meta || {};
+  const lines = [];
+  if (m.n_subjects_baseline) lines.push(`baseline subjects: <b>${m.n_subjects_baseline}</b>`);
+  if (m.n_bootstrap) lines.push(`bootstrap iters: <b>${m.n_bootstrap}</b>`);
+  if (m.braak_concordance_rho !== null && m.braak_concordance_rho !== undefined)
+    lines.push(`braak concordance &rho;: <b>${m.braak_concordance_rho.toFixed(3)}</b>${
+      m.braak_concordance_p !== null ? ` (p = ${m.braak_concordance_p.toFixed(4)})` : ""
+    }`);
+  if (m.asv_vs_shap_corr !== null && m.asv_vs_shap_corr !== undefined)
+    lines.push(`ASV &harr; SHAP r: <b>${m.asv_vs_shap_corr.toFixed(3)}</b>`);
+  if (m.asv_n_instances)
+    lines.push(`ASV instances: <b>${m.asv_n_instances}</b>`);
+  document.getElementById("meta-block").innerHTML = lines.join("<br>") || "(no metadata)";
+}
+
+function populateTopPairs() {
+  const top = [...edges].sort((a, b) => b.freq - a.freq).slice(0, 15);
+  const div = document.getElementById("top-pairs");
+  div.innerHTML = "";
+  top.forEach(e => {
+    const row = document.createElement("div");
+    row.className = "pair-row";
+    const lbl = (s) => s.replace(/_GVOL|_THICKNESS/g, "").replace(/_/g, " ");
+    row.innerHTML =
+      `<span class="pair-name">${lbl(e.source)} &rarr; ${lbl(e.target)}</span>` +
+      `<span class="pair-h">${e.freq.toFixed(2)}</span>`;
+    div.appendChild(row);
+  });
+}
+
+// ==== Force simulation =========================================
+function startSimulation() {
+  let t = 0;
+  function step() {
+    if (layoutMode === "force") tick(0.04);
+    requestAnimationFrame(step);
+    t++;
+  }
+  step();
+}
+
+function tick(alpha) {
+  if (alpha > 0) {
+    // Repulsion (Coulomb)
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[j].x - nodes[i].x;
+        const dy = nodes[j].y - nodes[i].y;
+        const d2 = Math.max(50, dx * dx + dy * dy);
+        const f = 4000 / d2;
+        const dx2 = (dx / Math.sqrt(d2)) * f;
+        const dy2 = (dy / Math.sqrt(d2)) * f;
+        nodes[i].vx -= dx2 * alpha;
+        nodes[i].vy -= dy2 * alpha;
+        nodes[j].vx += dx2 * alpha;
+        nodes[j].vy += dy2 * alpha;
+      }
+    }
+    // Attraction along edges (only those above threshold)
+    const thr = parseFloat(document.getElementById("thresh").value);
+    edges.forEach(e => {
+      if (e.freq < thr) return;
+      const a = nodes[nodeIndex[e.source]];
+      const b = nodes[nodeIndex[e.target]];
+      if (!a || !b) return;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) + 1e-3;
+      const f = (d - 140) * 0.04 * e.freq;
+      const ux = dx / d, uy = dy / d;
+      a.vx += ux * f * alpha;
+      a.vy += uy * f * alpha;
+      b.vx -= ux * f * alpha;
+      b.vy -= uy * f * alpha;
+    });
+    // Gentle gravity to centre
+    nodes.forEach(n => {
+      n.vx += (W / 2 - n.x) * 0.0008;
+      n.vy += (H / 2 - n.y) * 0.0008;
+      n.vx *= 0.85; n.vy *= 0.85;
+      n.x += n.vx; n.y += n.vy;
+      n.x = Math.max(40, Math.min(W - 40, n.x));
+      n.y = Math.max(40, Math.min(H - 40, n.y));
+    });
+  }
+  draw();
+}
+
+function applyHierarchicalLayout() {
+  // X = topological rank → columns; Y = within-column index
+  const ranked = [...nodes].sort((a, b) => (a.topo_rank ?? 99) - (b.topo_rank ?? 99));
+  // Bin into ~10 columns
+  const nCols = Math.min(10, Math.max(3, Math.ceil(Math.sqrt(ranked.length))));
+  const perCol = Math.ceil(ranked.length / nCols);
+  ranked.forEach((n, i) => {
+    const col = Math.floor(i / perCol);
+    const row = i % perCol;
+    n.x = 80 + (col + 0.5) * ((W - 160) / nCols);
+    n.y = 60 + (row + 0.5) * ((H - 120) / perCol);
+    n.vx = 0; n.vy = 0;
+  });
+  draw();
+}
+
+// ==== Drawing ==================================================
+let zoomScale = 1, panX = 0, panY = 0;
+let highlightId = null;
+
+function draw() {
+  const thr = parseFloat(document.getElementById("thresh").value);
+  document.getElementById("thresh-val").textContent = thr.toFixed(2);
+
+  rootG.innerHTML = "";
+  rootG.setAttribute("transform", `translate(${panX} ${panY}) scale(${zoomScale})`);
+
+  // ---- Edges ----
+  const visibleEdges = edges.filter(e => e.freq >= thr);
+  const dimMode = highlightId !== null;
+  visibleEdges.forEach(e => {
+    const a = nodes[nodeIndex[e.source]];
+    const b = nodes[nodeIndex[e.target]];
+    if (!a || !b) return;
+    const isHL = dimMode && (e.source === highlightId || e.target === highlightId);
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // Stop arrow short of node radius so head sits at node edge
+    const rB = nodeRadius(b);
+    const tx = b.x - (dx / len) * (rB + 4);
+    const ty = b.y - (dy / len) * (rB + 4);
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.x);
+    line.setAttribute("y1", a.y);
+    line.setAttribute("x2", tx);
+    line.setAttribute("y2", ty);
+    line.setAttribute("stroke", isHL ? "#ffd700" : (dimMode ? "rgba(120,140,170,0.15)" : colorForFreq(e.freq)));
+    line.setAttribute("stroke-width", isHL ? widthForFreq(e.freq) + 1 : widthForFreq(e.freq));
+    line.setAttribute("stroke-opacity", dimMode && !isHL ? 0.18 : 0.85);
+    line.setAttribute("marker-end", isHL ? "url(#arrow-highlight)" : markerForFreq(e.freq));
+    rootG.appendChild(line);
+  });
+
+  // ---- Nodes ----
+  nodes.forEach(n => {
+    const r = nodeRadius(n);
+    const isHL = dimMode && n.id === highlightId;
+    const connected = dimMode && visibleEdges.some(
+      e => (e.source === highlightId && e.target === n.id)
+        || (e.target === highlightId && e.source === n.id)
+    );
+
+    const circ = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    circ.setAttribute("cx", n.x);
+    circ.setAttribute("cy", n.y);
+    circ.setAttribute("r", r);
+    circ.setAttribute("fill", "#1a0f2e");
+    let stroke = "#4a9eff";
+    if (n.isRoot) stroke = "#ffd700";
+    else if (n.isHub) stroke = "#ff6b6b";
+    if (isHL) stroke = "#ffd700";
+    circ.setAttribute("stroke", stroke);
+    circ.setAttribute("stroke-width", isHL ? 3 : 2);
+    circ.setAttribute("opacity", dimMode && !isHL && !connected ? 0.25 : 1);
+    circ.style.cursor = "pointer";
+    circ.addEventListener("click", () => selectNode(n.id));
+    rootG.appendChild(circ);
+
+    const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    txt.setAttribute("class", "node-label");
+    txt.setAttribute("x", n.x);
+    txt.setAttribute("y", n.y);
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("dominant-baseline", "middle");
+    txt.setAttribute("font-size", Math.max(7, Math.min(11, r / 1.6)));
+    txt.setAttribute("opacity", dimMode && !isHL && !connected ? 0.3 : 1);
+    txt.textContent = abbreviate(n.id);
+    rootG.appendChild(txt);
+  });
+
+  // Stats
+  document.getElementById("stat-nodes").textContent = nodes.length;
+  document.getElementById("stat-edges").textContent = visibleEdges.length;
+  document.getElementById("stat-total").textContent = edges.length;
+}
+
+function nodeRadius(n) {
+  const maxDeg = Math.max(1e-9, ...nodes.map(x => x.deg));
+  return 14 + 22 * (n.deg / maxDeg);
+}
+
+function abbreviate(id) {
+  // Compact label for the bubble
+  return id
+    .replace(/_GVOL/g, "")
+    .replace(/_THICKNESS/g, "·thk")
+    .replace(/_/g, " ")
+    .toLowerCase();
+}
+
+// ==== Interactions =============================================
+let isPanning = false, panStart = null;
+svg.addEventListener("mousedown", e => {
+  if (e.target === svg || e.target === rootG) {
+    isPanning = true;
+    panStart = { x: e.clientX - panX, y: e.clientY - panY };
+  }
+});
+window.addEventListener("mouseup", () => { isPanning = false; });
+window.addEventListener("mousemove", e => {
+  if (!isPanning) return;
+  panX = e.clientX - panStart.x;
+  panY = e.clientY - panStart.y;
+  rootG.setAttribute("transform", `translate(${panX} ${panY}) scale(${zoomScale})`);
+});
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const f = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+  zoomScale = Math.max(0.3, Math.min(3, zoomScale * f));
+  rootG.setAttribute("transform", `translate(${panX} ${panY}) scale(${zoomScale})`);
+}, { passive: false });
+
+document.getElementById("thresh").addEventListener("input", () => draw());
+document.getElementById("search").addEventListener("input", e => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) { highlightId = null; draw(); return; }
+  const hit = nodes.find(n => n.id.toLowerCase().includes(q.replace(/\s/g, "_"))
+                            || abbreviate(n.id).toLowerCase().includes(q));
+  highlightId = hit ? hit.id : null;
+  draw();
+  if (hit) selectNode(hit.id, /*fromSearch=*/true);
+});
+document.getElementById("layout-btn").addEventListener("click", e => {
+  layoutMode = layoutMode === "force" ? "hier" : "force";
+  e.target.classList.toggle("active");
+  e.target.textContent = layoutMode === "force" ? "Force" : "Hierarchical";
+  if (layoutMode === "hier") applyHierarchicalLayout();
+});
+
+function selectNode(id, fromSearch = false) {
+  highlightId = id;
+  if (!fromSearch) document.getElementById("search").value = "";
+  draw();
+  const n = nodes[nodeIndex[id]];
+  const parents = edges.filter(e => e.target === id).sort((a, b) => b.freq - a.freq);
+  const children = edges.filter(e => e.source === id).sort((a, b) => b.freq - a.freq);
+  const lbl = (s) => s.replace(/_GVOL|_THICKNESS/g, "").replace(/_/g, " ");
+
+  let html = `<div class="meta">
+    <b>${id.replace(/_/g, " ")}</b><br>
+    LiNGAM rank: ${n.lingam_rank ?? "—"} &middot;
+    Braak tier: ${n.braak ?? "—"} &middot;
+    deg: ${n.deg.toFixed(2)}
+  </div>`;
+  html += `<div class="conn-list">`;
+  html += `<div style="color:#aa88ff;font-size:0.65rem;margin-top:6px">PARENTS (${parents.length})</div>`;
+  parents.slice(0, 8).forEach(e => {
+    html += `<div class="conn-row in"><span>${lbl(e.source)}</span><span>${e.freq.toFixed(2)}</span></div>`;
+  });
+  if (parents.length === 0) html += `<div class="conn-row" style="color:#4a6080">(none — causal root)</div>`;
+  html += `<div style="color:#ff8866;font-size:0.65rem;margin-top:6px">CHILDREN (${children.length})</div>`;
+  children.slice(0, 8).forEach(e => {
+    html += `<div class="conn-row out"><span>${lbl(e.target)}</span><span>${e.freq.toFixed(2)}</span></div>`;
+  });
+  if (children.length === 0) html += `<div class="conn-row" style="color:#4a6080">(none — causal leaf)</div>`;
+  html += `</div>`;
+  document.getElementById("node-info").innerHTML = html;
+}
+
+// Boot
+loadData();
+</script>
+</body>
+</html>
